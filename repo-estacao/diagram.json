@@ -3,32 +3,36 @@
   "author": "Projeto Estação Meteorológica",
   "editor": "wokwi",
   "parts": [
-    { "type": "board-esp32-devkit-c-v4", "id": "esp1", "top": 100, "left": 10, "attrs": {} },
-    { "type": "wokwi-bme280", "id": "bme1", "top": 60, "left": 210, "attrs": {} },
-    { "type": "wokwi-photoresistor-sensor", "id": "ldr1", "top": 160, "left": 210, "attrs": {} },
-    {
-      "type": "wokwi-potentiometer",
-      "id": "mq135_sim1",
-      "top": 250,
-      "left": 210,
-      "attrs": { "value": "50" }
-    },
-    { "type": "wokwi-slide-switch", "id": "rain_sim1", "top": 340, "left": 210, "attrs": {} }
+    { "type": "board-esp32-devkit-c-v4", "id": "esp1", "top": 120, "left": 10, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht1", "top": 10, "left": 250, "attrs": { "temperature": "24", "humidity": "40" } },
+    { "type": "board-bmp180", "id": "bmp1", "top": 120, "left": 250, "attrs": { "pressure": "101325" } },
+    { "type": "wokwi-photoresistor-sensor", "id": "ldr1", "top": 230, "left": 250, "attrs": { "lux": "500" } },
+    { "type": "wokwi-potentiometer", "id": "mq135_sim1", "top": 340, "left": 250, "attrs": { "value": "50" } },
+    { "type": "wokwi-slide-switch", "id": "rain_sim1", "top": 440, "left": 250, "attrs": { "bounce": "0" } }
   ],
   "connections": [
-    [ "esp1:3V3", "bme1:VCC", "red", [] ],
-    [ "esp1:GND.1", "bme1:GND", "black", [] ],
-    [ "esp1:D21", "bme1:SDA", "green", [] ],
-    [ "esp1:D22", "bme1:SCL", "yellow", [] ],
+    [ "esp1:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp1:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp1:3V3", "dht1:VCC", "red", [] ],
+    [ "esp1:GND.1", "dht1:GND", "black", [] ],
+    [ "esp1:15", "dht1:SDA", "green", [] ],
+    [ "esp1:3V3", "bmp1:VCC", "red", [] ],
+    [ "esp1:GND.1", "bmp1:GND", "black", [] ],
+    [ "esp1:21", "bmp1:SDA", "green", [] ],
+    [ "esp1:22", "bmp1:SCL", "yellow", [] ],
     [ "esp1:3V3", "ldr1:VCC", "red", [] ],
-    [ "esp1:GND.2", "ldr1:GND", "black", [] ],
-    [ "esp1:D34", "ldr1:AOUT", "blue", [] ],
+    [ "esp1:GND.1", "ldr1:GND", "black", [] ],
+    [ "esp1:34", "ldr1:AO", "blue", [] ],
     [ "esp1:3V3", "mq135_sim1:VCC", "red", [] ],
-    [ "esp1:GND.3", "mq135_sim1:GND", "black", [] ],
-    [ "esp1:D35", "mq135_sim1:SIG", "orange", [] ],
-    [ "esp1:3V3", "rain_sim1:VCC", "red", [] ],
-    [ "esp1:GND.4", "rain_sim1:GND", "black", [] ],
-    [ "esp1:D32", "rain_sim1:SIG", "purple", [] ]
+    [ "esp1:GND.1", "mq135_sim1:GND", "black", [] ],
+    [ "esp1:35", "mq135_sim1:SIG", "orange", [] ],
+    [ "esp1:GND.1", "rain_sim1:1", "black", [] ],
+    [ "esp1:32", "rain_sim1:2", "purple", [] ],
+    [ "esp1:3V3", "rain_sim1:3", "red", [] ]
   ],
-  "dependencies": {}
+  "dependencies": {},
+  "serialMonitor": {
+    "display": "always",
+    "newline": "lf"
+  }
 }
