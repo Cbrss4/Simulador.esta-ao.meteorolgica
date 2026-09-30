@@ -1,16 +1,14 @@
 # Software da estação meteorológica
 
-Este repositório contém o subsistema de software desenvolvido para a entrega S2 da estação meteorológica. O fluxo recebe mensagens MQTT, valida o contrato de dados, armazena leituras em SQLite e as disponibiliza por uma API FastAPI.
+Este diretório reúne a parte de software da estação meteorológica. O backend recebe uma leitura por MQTT, confere o JSON, grava os dados no SQLite e permite consultá-los pela API.
 
 ```text
 Publicador MQTT → Mosquitto → assinante Python → Pydantic → SQLite → FastAPI
 ```
 
-Na S2, `mosquitto_pub` é usado somente para comprovar o fluxo. Na integração posterior, o ESP32 publicará no mesmo tópico e será processado pelos mesmos componentes.
+Enquanto o firmware não está integrado, usamos `mosquitto_pub` para enviar uma leitura de teste. Depois, o ESP32 ocupará o lugar desse comando; o restante do fluxo continuará o mesmo.
 
-## Estado atual
-
-Implementado e testado:
+## O que já funciona
 
 - broker Mosquitto validado localmente;
 - assinante MQTT 3.1.1 com Paho MQTT;
@@ -23,7 +21,7 @@ Implementado e testado:
 - testes automatizados com bancos descartáveis;
 - teste integrado local do fluxo completo.
 
-Ainda não comprovado:
+Ainda falta testar com o hardware:
 
 - publicação pelo ESP32;
 - leitura dos sensores físicos;
@@ -123,8 +121,10 @@ Com Mosquitto, assinante e API em execução, abra um terceiro terminal na pasta
 
 ```powershell
 $validPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.1,"humidity_pct":58.4,"pressure_hpa":1011.7,"gas_raw":812,"light_detected":true,"rain_detected":false}'
-& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $validPayload
+$validPayload | & 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -s
 ```
+
+O conteúdo é enviado pela entrada padrão (`-s`) para o Windows PowerShell preservar as aspas do JSON.
 
 Consulte a leitura recebida:
 
@@ -139,7 +139,7 @@ Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/readings?limit=10'
 
 ```powershell
 $partialPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.2,"humidity_pct":58.1,"pressure_hpa":1011.6,"gas_raw":null,"light_detected":true,"rain_detected":false}'
-& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $partialPayload
+$partialPayload | & 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -s
 ```
 
 A leitura deve aparecer na API com `status: "partial"`.
@@ -150,7 +150,7 @@ Umidade acima de 100 deve ser rejeitada:
 
 ```powershell
 $invalidPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.3,"humidity_pct":150,"pressure_hpa":1011.5,"gas_raw":820,"light_detected":true,"rain_detected":false}'
-& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $invalidPayload
+$invalidPayload | & 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -s
 ```
 
 O assinante registra o motivo no log, a mensagem não entra no histórico e a API continua respondendo:
@@ -158,6 +158,12 @@ O assinante registra o motivo no log, a mensagem não entra no histórico e a AP
 ```powershell
 Invoke-RestMethod 'http://127.0.0.1:8000/health'
 ```
+
+### Resultado visto na API
+
+![Leitura manual de teste retornada pela API](docs/evidencias/api-leitura-json.png)
+
+*Leitura fictícia publicada manualmente para testar o fluxo. A imagem não representa dados dos sensores físicos.*
 
 ## Executar os testes
 

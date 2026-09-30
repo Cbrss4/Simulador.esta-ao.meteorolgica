@@ -34,7 +34,7 @@ uv run pytest -q
 Resultado observado:
 
 ```text
-66 passed, 1 warning in 1.72s
+66 passed, 1 warning in 1.60s
 ```
 
 O aviso é uma depreciação proveniente da integração entre `fastapi.testclient` e HTTPX. Ele não provocou falha nos testes.
@@ -63,6 +63,22 @@ Os testes cobrem:
 | Banco após rejeição | Histórico permaneceu com duas mensagens aceitas | Aprovado |
 | Continuidade | `/health` respondeu HTTP 200 após a mensagem inválida | Aprovado |
 | Isolamento | `data/station.db` preservado; banco descartável removido | Aprovado |
+
+## Reprodução manual por Tales
+
+Tales repetiu o fluxo em 2026-09-30 usando um banco separado, `data/s2-print.db`. Uma única mensagem fictícia foi publicada com `mosquitto_pub`, recebida no tópico MQTT, armazenada como ID 1 com status `valid` e consultada em `GET /api/v1/readings/latest` com resposta HTTP 200.
+
+No Windows PowerShell, o JSON precisa ser enviado pela entrada padrão do `mosquitto_pub`:
+
+```powershell
+$validPayload | & 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -s
+```
+
+A tentativa anterior com `-m $validPayload` perdeu as aspas internas ao chamar o executável e foi rejeitada corretamente pela validação. O README foi corrigido para usar `-s`.
+
+![Leitura manual de teste retornada pela API](evidencias/api-leitura-json.png)
+
+Esta imagem mostra dados fictícios do teste. Ela não comprova leitura do ESP32 nem dos sensores físicos. Prints dos terminais não foram incluídos para evitar divulgar o usuário e os caminhos locais do computador.
 
 ## Versionamento
 
