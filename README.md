@@ -95,3 +95,49 @@ O consumidor MQTT ainda não faz parte desta etapa. O modelo segue a proposta ap
 A classe `ReadingRepository`, em `app/repository.py`, recebe somente mensagens já validadas pelo Pydantic. Ela gera `received_at`, normaliza os horários para UTC e grava a leitura como `valid` ou `partial` na tabela `readings`.
 
 Os testes dessa camada usam bancos temporários. Nenhuma leitura fictícia é inserida em `data/station.db` durante a suíte.
+
+## Demonstração local da S2
+
+Use três terminais abertos na pasta `software/`. O Mosquitto deve estar em execução e o `.env` deve apontar assinante e API para o mesmo banco. Para separar a demonstração do banco de desenvolvimento, pode ser usado `WEATHER_DATABASE_PATH=data/s2-demo.db`.
+
+No primeiro terminal, execute o assinante:
+
+```powershell
+uv run python -m app.mqtt_subscriber
+```
+
+No segundo, execute a API:
+
+```powershell
+uv run uvicorn app.main:app --reload
+```
+
+No terceiro, publique uma leitura válida:
+
+```powershell
+$validPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.1,"humidity_pct":58.4,"pressure_hpa":1011.7,"gas_raw":812,"light_detected":true,"rain_detected":false}'
+& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $validPayload
+```
+
+Consulte o resultado:
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/readings/latest'
+Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/readings?limit=10'
+```
+
+Para demonstrar uma leitura parcial, publique o mesmo contrato com um sensor indisponível:
+
+```powershell
+$partialPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.2,"humidity_pct":58.1,"pressure_hpa":1011.6,"gas_raw":null,"light_detected":true,"rain_detected":false}'
+& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $partialPayload
+```
+
+Para demonstrar rejeição sem interrupção do serviço, publique umidade fora do intervalo permitido:
+
+```powershell
+$invalidPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.3,"humidity_pct":150,"pressure_hpa":1011.5,"gas_raw":820,"light_detected":true,"rain_detected":false}'
+& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $invalidPayload
+```
+
+O terminal do assinante deve registrar o motivo da rejeição. A mensagem inválida não deve aparecer no histórico, e `/health` deve continuar respondendo com HTTP 200.
