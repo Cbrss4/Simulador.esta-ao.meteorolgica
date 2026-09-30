@@ -1,20 +1,163 @@
 # Software da estação meteorológica
 
-Backend local da estação meteorológica, desenvolvido com Python e FastAPI.
+Este repositório contém o subsistema de software desenvolvido para a entrega S2 da estação meteorológica. O fluxo recebe mensagens MQTT, valida o contrato de dados, armazena leituras em SQLite e as disponibiliza por uma API FastAPI.
 
-## Preparar o ambiente
+```text
+Publicador MQTT → Mosquitto → assinante Python → Pydantic → SQLite → FastAPI
+```
+
+Na S2, `mosquitto_pub` é usado somente para comprovar o fluxo. Na integração posterior, o ESP32 publicará no mesmo tópico e será processado pelos mesmos componentes.
+
+## Estado atual
+
+Implementado e testado:
+
+- broker Mosquitto validado localmente;
+- assinante MQTT 3.1.1 com Paho MQTT;
+- configuração externa por `.env`;
+- validação do payload com Pydantic;
+- classificação de leituras como `valid` ou `partial`;
+- rejeição observável de mensagens inválidas sem interrupção do serviço;
+- persistência SQLite com horário de recebimento em UTC;
+- API para saúde, leitura atual, histórico e consulta por ID;
+- testes automatizados com bancos descartáveis;
+- teste integrado local do fluxo completo.
+
+Ainda não comprovado:
+
+- publicação pelo ESP32;
+- leitura dos sensores físicos;
+- comunicação pelo hotspot;
+- acesso de outro dispositivo ao broker e à API;
+- queda e reconexão real do broker;
+- calibração ou precisão física dos sensores.
+
+O contrato MQTT permanece provisório até a revisão de Gabriel.
+
+## Requisitos
+
+- Windows;
+- Python 3.12 ou compatível;
+- `uv`;
+- Eclipse Mosquitto 2.1.2 ou compatível.
+
+O Mosquitto pode ser instalado pelo WinGet:
+
+```powershell
+winget install --id EclipseFoundation.Mosquitto --exact
+```
+
+Confira se o serviço está em execução:
+
+```powershell
+Get-Service mosquitto
+```
+
+## Preparar o projeto
+
+Abra o PowerShell na pasta `software` e instale as dependências:
 
 ```powershell
 uv sync
 ```
 
-Copie o arquivo de exemplo para criar a configuração local:
+Crie a configuração local a partir do exemplo:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-O `.env` não é versionado. Os valores padrão usam o broker local em `127.0.0.1:1883`, tópico `weather/station-01/readings`, QoS 1 e banco `data/station.db`. Para a integração pela rede, altere somente o `.env` local; não coloque IP pessoal ou credenciais no Git.
+O `.env` não é versionado. Não adicione senhas, IPs pessoais ou credenciais ao Git.
+
+### Configurações disponíveis
+
+| Variável | Valor de exemplo | Finalidade |
+|---|---|---|
+| `MQTT_HOST` | `127.0.0.1` | Endereço do broker |
+| `MQTT_PORT` | `1883` | Porta MQTT |
+| `MQTT_TOPIC` | `weather/station-01/readings` | Tópico das leituras |
+| `MQTT_QOS` | `1` | Qualidade de serviço MQTT |
+| `MQTT_KEEPALIVE` | `60` | Intervalo de keepalive em segundos |
+| `WEATHER_DATABASE_PATH` | `data/station.db` | Caminho do banco SQLite |
+
+Para uma execução descartável da S2, pode ser usado `WEATHER_DATABASE_PATH=data/s2-demo.db`.
+
+## Executar o sistema
+
+Use dois terminais na pasta `software`, ambos com a mesma configuração `.env`.
+
+No primeiro terminal, inicie o assinante MQTT:
+
+```powershell
+uv run python -m app.mqtt_subscriber
+```
+
+No segundo terminal, inicie a API:
+
+```powershell
+uv run uvicorn app.main:app --reload
+```
+
+O banco e a tabela `readings` são inicializados automaticamente. Também é possível inicializá-los manualmente:
+
+```powershell
+uv run python -m app.database
+```
+
+## Endpoints
+
+| Método e rota | Resultado |
+|---|---|
+| `GET /health` | Confirma que a API está em execução |
+| `GET /api/v1/readings/latest` | Retorna a leitura `valid` ou `partial` mais recente |
+| `GET /api/v1/readings?limit=100` | Retorna o histórico do mais recente para o mais antigo |
+| `GET /api/v1/readings/{id}` | Retorna uma leitura específica |
+
+O histórico aceita `limit` de 1 a 500. Banco vazio retorna uma lista vazia no histórico e HTTP 404 na consulta da leitura mais recente.
+
+## Comprovar o fluxo MQTT
+
+Com Mosquitto, assinante e API em execução, abra um terceiro terminal na pasta `software`.
+
+### Mensagem válida
+
+```powershell
+$validPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.1,"humidity_pct":58.4,"pressure_hpa":1011.7,"gas_raw":812,"light_detected":true,"rain_detected":false}'
+& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $validPayload
+```
+
+Consulte a leitura recebida:
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/readings/latest'
+Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/readings?limit=10'
+```
+
+### Mensagem parcial
+
+`gas_raw: null` representa um sensor temporariamente indisponível:
+
+```powershell
+$partialPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.2,"humidity_pct":58.1,"pressure_hpa":1011.6,"gas_raw":null,"light_detected":true,"rain_detected":false}'
+& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $partialPayload
+```
+
+A leitura deve aparecer na API com `status: "partial"`.
+
+### Mensagem inválida
+
+Umidade acima de 100 deve ser rejeitada:
+
+```powershell
+$invalidPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.3,"humidity_pct":150,"pressure_hpa":1011.5,"gas_raw":820,"light_detected":true,"rain_detected":false}'
+& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $invalidPayload
+```
+
+O assinante registra o motivo no log, a mensagem não entra no histórico e a API continua respondendo:
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:8000/health'
+```
 
 ## Executar os testes
 
@@ -22,122 +165,34 @@ O `.env` não é versionado. Os valores padrão usam o broker local em `127.0.0.
 uv run pytest
 ```
 
-## Executar a API
+Os testes criam bancos temporários. Eles não utilizam nem alteram `data/station.db`.
 
-```powershell
-uv run uvicorn app.main:app --reload
-```
-
-## Executar o assinante MQTT
-
-Com o Mosquitto em execução e o `.env` configurado:
-
-```powershell
-uv run python -m app.mqtt_subscriber
-```
-
-O assinante usa MQTT 3.1.1, conecta ao broker configurado e assina `MQTT_TOPIC` com `MQTT_QOS`. Mensagens válidas e parciais são armazenadas; mensagens inválidas são rejeitadas com o motivo registrado no log, sem encerrar o serviço.
-
-Com o servidor em execução, o endpoint de verificação fica disponível em:
+## Estrutura principal
 
 ```text
-http://127.0.0.1:8000/health
+software/
+├── app/
+│   ├── database.py
+│   ├── main.py
+│   ├── models.py
+│   ├── mqtt_subscriber.py
+│   ├── repository.py
+│   └── settings.py
+├── docs/
+│   └── evidencias-s2.md
+├── tests/
+├── .env.example
+├── pyproject.toml
+└── uv.lock
 ```
 
-Resposta esperada:
+## Unidades e limites
 
-```json
-{"status": "ok"}
-```
+- `temperature_c`: graus Celsius;
+- `humidity_pct`: porcentagem entre 0 e 100;
+- `pressure_hpa`: hectopascal;
+- `gas_raw`: valor bruto, não representa ppm;
+- `light_detected`: estado digital normalizado, não representa lux;
+- `rain_detected`: presença de água normalizada, não representa milímetros.
 
-O dashboard pode consultar a leitura válida ou parcial mais recente em:
-
-```text
-http://127.0.0.1:8000/api/v1/readings/latest
-```
-
-Enquanto o banco estiver vazio, esse endpoint responde com HTTP 404 e `{"detail": "Nenhuma leitura disponível"}`.
-
-O histórico fica disponível em:
-
-```text
-http://127.0.0.1:8000/api/v1/readings
-```
-
-O parâmetro `limit` aceita valores de 1 a 500 e usa 100 por padrão. O histórico retorna somente leituras `valid` ou `partial`, da mais recente para a mais antiga. Banco vazio resulta em uma lista JSON vazia.
-
-Uma leitura específica pode ser consultada pelo identificador:
-
-```text
-http://127.0.0.1:8000/api/v1/readings/1
-```
-
-Identificadores inexistentes retornam HTTP 404. O identificador deve ser um número inteiro maior que zero.
-
-## Inicializar o banco local
-
-```powershell
-uv run python -m app.database
-```
-
-Por padrão, o banco é criado em `data/station.db`. Para usar outro caminho, defina `WEATHER_DATABASE_PATH` antes de executar o comando.
-
-O arquivo SQLite é local e não deve ser versionado. A tabela `readings` segue a proposta de contrato aprovada por Tales e ainda poderá mudar após a revisão de Gabriel.
-
-## Validação das mensagens
-
-O modelo `ReadingPayloadV1`, em `app/models.py`, valida o JSON proposto para o ESP32 antes da persistência. Ele exige todos os campos do contrato versão 1, rejeita campos extras e tipos incorretos, exige fuso em `captured_at` quando houver horário e classifica como parcial uma mensagem com algum sensor igual a `null`.
-
-O consumidor MQTT ainda não faz parte desta etapa. O modelo segue a proposta aprovada por Tales e poderá ser revisado após a manifestação de Gabriel.
-
-## Persistência das leituras
-
-A classe `ReadingRepository`, em `app/repository.py`, recebe somente mensagens já validadas pelo Pydantic. Ela gera `received_at`, normaliza os horários para UTC e grava a leitura como `valid` ou `partial` na tabela `readings`.
-
-Os testes dessa camada usam bancos temporários. Nenhuma leitura fictícia é inserida em `data/station.db` durante a suíte.
-
-## Demonstração local da S2
-
-Use três terminais abertos na pasta `software/`. O Mosquitto deve estar em execução e o `.env` deve apontar assinante e API para o mesmo banco. Para separar a demonstração do banco de desenvolvimento, pode ser usado `WEATHER_DATABASE_PATH=data/s2-demo.db`.
-
-No primeiro terminal, execute o assinante:
-
-```powershell
-uv run python -m app.mqtt_subscriber
-```
-
-No segundo, execute a API:
-
-```powershell
-uv run uvicorn app.main:app --reload
-```
-
-No terceiro, publique uma leitura válida:
-
-```powershell
-$validPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.1,"humidity_pct":58.4,"pressure_hpa":1011.7,"gas_raw":812,"light_detected":true,"rain_detected":false}'
-& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $validPayload
-```
-
-Consulte o resultado:
-
-```powershell
-Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/readings/latest'
-Invoke-RestMethod 'http://127.0.0.1:8000/api/v1/readings?limit=10'
-```
-
-Para demonstrar uma leitura parcial, publique o mesmo contrato com um sensor indisponível:
-
-```powershell
-$partialPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.2,"humidity_pct":58.1,"pressure_hpa":1011.6,"gas_raw":null,"light_detected":true,"rain_detected":false}'
-& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $partialPayload
-```
-
-Para demonstrar rejeição sem interrupção do serviço, publique umidade fora do intervalo permitido:
-
-```powershell
-$invalidPayload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.3,"humidity_pct":150,"pressure_hpa":1011.5,"gas_raw":820,"light_detected":true,"rain_detected":false}'
-& 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -m $invalidPayload
-```
-
-O terminal do assinante deve registrar o motivo da rejeição. A mensagem inválida não deve aparecer no histórico, e `/health` deve continuar respondendo com HTTP 200.
+As evidências técnicas da S2 estão em [docs/evidencias-s2.md](docs/evidencias-s2.md).
