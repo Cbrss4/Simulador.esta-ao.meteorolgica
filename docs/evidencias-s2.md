@@ -86,5 +86,3 @@ O `.env`, os bancos SQLite, a `.venv` e os caches não são versionados. Os test
 - regras de firewall para acesso externo ao notebook;
 - queda e reconexão real do broker;
 - calibração e precisão física dos sensores.
-
-O contrato MQTT ainda aguarda a revisão de Gabriel.
