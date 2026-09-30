@@ -8,6 +8,14 @@ Backend local da estação meteorológica, desenvolvido com Python e FastAPI.
 uv sync
 ```
 
+Copie o arquivo de exemplo para criar a configuração local:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+O `.env` não é versionado. Os valores padrão usam o broker local em `127.0.0.1:1883`, tópico `weather/station-01/readings`, QoS 1 e banco `data/station.db`. Para a integração pela rede, altere somente o `.env` local; não coloque IP pessoal ou credenciais no Git.
+
 ## Executar os testes
 
 ```powershell
