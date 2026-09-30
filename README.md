@@ -28,6 +28,16 @@ uv run pytest
 uv run uvicorn app.main:app --reload
 ```
 
+## Executar o assinante MQTT
+
+Com o Mosquitto em execução e o `.env` configurado:
+
+```powershell
+uv run python -m app.mqtt_subscriber
+```
+
+O assinante usa MQTT 3.1.1, conecta ao broker configurado e assina `MQTT_TOPIC` com `MQTT_QOS`. Mensagens válidas e parciais são armazenadas; mensagens inválidas são rejeitadas com o motivo registrado no log, sem encerrar o serviço.
+
 Com o servidor em execução, o endpoint de verificação fica disponível em:
 
 ```text
