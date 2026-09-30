@@ -34,7 +34,7 @@ uv sync
 Copy-Item .env.example .env
 ```
 
-O `.env` não é versionado. Não coloque senhas, credenciais ou IPs pessoais no repositório.
+O arquivo `.env` guarda a configuração local e já está incluído no `.gitignore`.
 
 ## Como executar
 
