@@ -1,18 +1,18 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BMP085.h>
-#include <DHTesp.h>
+#include <Adafruit_BME280.h>
 
-constexpr uint8_t DHT_PIN = 15;
+constexpr uint8_t SDA_PIN = 21;
+constexpr uint8_t SCL_PIN = 22;
 constexpr uint8_t LDR_PIN = 34;
 constexpr uint8_t MQ135_PIN = 35;
 constexpr uint8_t RAIN_PIN = 32;
-constexpr unsigned long INTERVALO_LEITURA_MS = 2000;
+constexpr int LIMITE_CHUVA = 3000;  // abaixo disso = molhado (ajustar depois)
+constexpr unsigned long INTERVALO_LEITURA_MS = 5000;
 
-Adafruit_BMP085 bmp;
-DHTesp dht;
-bool bmpDisponivel = false;
+Adafruit_BME280 bme;
+bool bmeDisponivel = false;
 
 void imprimirMedida(const char* rotulo, float valor, const char* unidade,
                     float minimo, float maximo) {
@@ -29,46 +29,49 @@ void imprimirMedida(const char* rotulo, float valor, const char* unidade,
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(3000);
   Serial.println("Iniciando Estação Meteorológica...");
 
-  Wire.begin();
-  dht.setup(DHT_PIN, DHTesp::DHT22);
+  Wire.begin(SDA_PIN, SCL_PIN);
 
-  bmpDisponivel = bmp.begin();
-  if (!bmpDisponivel) {
-    Serial.println("Aviso: BMP180 não encontrado. As outras leituras continuarão normalmente.");
+  // O BME280 costuma usar o endereço 0x76 ou 0x77
+  bmeDisponivel = bme.begin(0x76, &Wire);
+  if (!bmeDisponivel) {
+    bmeDisponivel = bme.begin(0x77, &Wire);
+  }
+  if (!bmeDisponivel) {
+    Serial.println("Aviso: BME280 não encontrado (testei 0x76 e 0x77). Confira SDA/SCL/VIN/GND.");
+  } else {
+    Serial.println("BME280 encontrado!");
   }
 
   pinMode(LDR_PIN, INPUT);
   pinMode(MQ135_PIN, INPUT);
   pinMode(RAIN_PIN, INPUT);
 
-  Serial.println("Sensores simulados prontos!");
-  Serial.println("Nota: DHT22 e BMP180 representam as medições previstas para o BME280 físico.");
+  Serial.println("Sensores prontos!");
 }
 
 void loop() {
-  TempAndHumidity ambiente = dht.getTempAndHumidity();
-  float pressao = bmpDisponivel ? bmp.readPressure() / 100.0F : NAN;
-
-  if (isnan(ambiente.temperature) || isnan(ambiente.humidity)) {
-    Serial.print("Diagnóstico DHT22: ");
-    Serial.println(dht.getStatusString());
-  }
+  float temperatura = bmeDisponivel ? bme.readTemperature() : NAN;
+  float umidade = bmeDisponivel ? bme.readHumidity() : NAN;
+  float pressao = bmeDisponivel ? bme.readPressure() / 100.0F : NAN;
 
   int luminosidade = analogRead(LDR_PIN);
   int qualidadeAr = analogRead(MQ135_PIN);
-  bool chuvaDetectada = digitalRead(RAIN_PIN) == LOW;
+  int chuvaBruta = analogRead(RAIN_PIN);
+  bool chuvaDetectada = chuvaBruta < LIMITE_CHUVA;
 
   Serial.println("---- Leitura da Estação ----");
-  imprimirMedida("Temperatura: ", ambiente.temperature, "°C", -40.0F, 80.0F);
-  imprimirMedida("Umidade: ", ambiente.humidity, "%", 0.0F, 100.0F);
+  imprimirMedida("Temperatura: ", temperatura, "°C", -40.0F, 80.0F);
+  imprimirMedida("Umidade: ", umidade, "%", 0.0F, 100.0F);
   imprimirMedida("Pressão: ", pressao, "hPa", 300.0F, 1100.0F);
-  Serial.print("Luminosidade simulada (LDR, leitura bruta): ");
+  Serial.print("Luminosidade (LDR, leitura bruta): ");
   Serial.println(luminosidade);
-  Serial.print("Qualidade do ar simulada (MQ-135, leitura bruta): ");
+  Serial.print("Qualidade do ar (MQ-135, leitura bruta): ");
   Serial.println(qualidadeAr);
+  Serial.print("Chuva (leitura bruta): ");
+  Serial.println(chuvaBruta);
   Serial.print("Chuva detectada: ");
   Serial.println(chuvaDetectada ? "SIM" : "NÃO");
   Serial.println("-----------------------------");
