@@ -58,7 +58,7 @@ Essa opção não exige instalação do VS Code, PlatformIO ou extensão do Wokw
 
 ### Opção local
 
-1. Abrir a pasta `repo-estacao` no VS Code.
+1. Abrir a pasta `simulador` no VS Code.
 2. Instalar as extensões PlatformIO IDE e Wokwi Simulator.
 3. Executar o Build do ambiente `esp32doit-devkit-v1` e aguardar `[SUCCESS]`.
 4. Executar `Wokwi: Start Simulator` pela paleta de comandos.

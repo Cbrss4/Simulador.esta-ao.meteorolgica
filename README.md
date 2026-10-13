@@ -1,31 +1,63 @@
 # Estação Meteorológica Inteligente
 
-Projeto integrador da disciplina Projeto e Desenvolvimento II, do segundo semestre de Ciência da Computação.
+Protótipo acadêmico de uma estação meteorológica com ESP32. O repositório reúne, em projetos independentes, o software de integração, o firmware dos sensores físicos e a simulação Wokwi.
 
-Esta primeira sprint apresenta um protótipo virtual da estação meteorológica. O objetivo é validar o circuito lógico, o firmware do ESP32 e a integração das leituras antes da aquisição e montagem dos componentes físicos.
+## Estrutura
 
-## Estado da S1
+```text
+├── software/                 # MQTT, validação, SQLite, API FastAPI e testes
+├── firmware/                 # ESP32 físico com BME280, entradas analógicas e MQTT
+│   ├── include/
+│   ├── src/
+│   └── platformio.ini
+├── simulador/                # Projeto PlatformIO independente para o Wokwi
+│   ├── src/
+│   ├── diagram.json
+│   ├── platformio.ini
+│   └── wokwi.toml
+├── evidencias/
+├── ENTREGA_S1.md
+├── diagrama-fluxo-codigo.svg
+└── diagrama-ligacao.svg
+```
 
-O simulador realiza leituras a cada dois segundos de:
+Cada pasta principal deve ser aberta ou executada separadamente. Os projetos `firmware/` e `simulador/` possuem dependências e componentes diferentes e não compartilham o mesmo `src/main.cpp`.
 
-- temperatura;
-- umidade;
-- pressão atmosférica;
-- luminosidade;
-- qualidade do ar simulada;
-- presença de chuva.
+## Fluxo do protótipo físico
 
-O firmware foi compilado com sucesso e as seis leituras foram confirmadas no monitor serial. Consulte [ENTREGA_S1.md](ENTREGA_S1.md) para ver o resultado, as limitações e o checklist da sprint.
+```text
+ESP32 → MQTT → validação Python → SQLite → API FastAPI → dashboard
+```
 
-**[Abrir a simulação pronta no Wokwi](https://wokwi.com/projects/474895435837456385)**
+As leituras brutas dos sensores não são apresentadas como unidades físicas sem método de calibração comprovado.
 
-Para uma avaliação rápida, basta abrir o link, clicar no botão verde de iniciar e acompanhar as leituras no monitor serial. Não é necessário instalar o VS Code, o PlatformIO ou a extensão local do Wokwi.
+## Software
 
-![Simulação do circuito e saída serial](evidencias/simulacao-wokwi-funcionando.png)
+Entre na pasta antes de executar os comandos:
 
-## Componentes da simulação
+```powershell
+cd software
+uv sync
+uv run pytest -q
+```
 
-O protótipo físico previsto no escopo utiliza BME280, MQ-135, LDR e módulo sensor de chuva. Como nem todos estão disponíveis de forma nativa no Wokwi, esta simulação utiliza componentes equivalentes para validar o fluxo do programa.
+As instruções de configuração, execução do broker, assinante MQTT, API e teste integrado estão em [`software/README.md`](software/README.md).
+
+## Firmware físico
+
+O firmware utiliza um arquivo local para a configuração da rede e do broker. Crie-o a partir do exemplo e não o adicione ao Git:
+
+```powershell
+cd firmware
+Copy-Item include/secrets.example.h include/secrets.h
+pio run
+```
+
+O arquivo `firmware/include/secrets.h` é ignorado pelo Git. O arquivo versionado `secrets.example.h` contém somente valores fictícios.
+
+## Simulador Wokwi
+
+O simulador preserva os componentes equivalentes utilizados na primeira sprint:
 
 | Variável | Protótipo físico | Simulação Wokwi |
 |---|---|---|
@@ -35,86 +67,32 @@ O protótipo físico previsto no escopo utiliza BME280, MQ-135, LDR e módulo se
 | Qualidade do ar | MQ-135 | Potenciômetro |
 | Presença de chuva | Módulo de chuva | Chave deslizante |
 
-Essas equivalências não substituem a calibração, os testes elétricos ou a avaliação de precisão com o hardware real.
+Essas equivalências validam o fluxo do programa, mas não substituem testes elétricos, calibração ou avaliação de precisão com o hardware real.
 
-## Estrutura
-
-```text
-├── README.md
-├── ENTREGA_S1.md
-├── evidencias/
-│   └── simulacao-wokwi-funcionando.png
-├── diagrama-fluxo-codigo.svg
-├── diagrama-ligacao.svg
-└── repo-estacao/
-    ├── src/
-    │   └── main.cpp
-    ├── .gitignore
-    ├── diagram.json
-    ├── platformio.ini
-    └── wokwi.toml
-```
-
-O `diagrama-ligacao.svg` representa o protótipo físico planejado. O circuito efetivamente usado na simulação está em `repo-estacao/diagram.json`.
-
-## Pré-requisitos
-
-Para executar pelo link do Wokwi no navegador, é necessário apenas um navegador com acesso à internet.
-
-Os itens abaixo são necessários somente para executar a cópia local:
-
-- Visual Studio Code;
-- extensão PlatformIO IDE;
-- extensão Wokwi Simulator;
-- Community License gratuita do Wokwi ativa.
-
-Não é necessário adquirir uma licença paga para executar a S1 online no VS Code.
-
-## Como executar
-
-### Pelo navegador (recomendado para avaliação)
-
-1. Abra [Estação Meteorológica — S1 no Wokwi](https://wokwi.com/projects/474895435837456385).
-2. Clique no botão verde `Start the simulation`.
-3. Aguarde a compilação e acompanhe as leituras no monitor serial.
-
-### Localmente no VS Code
-
-1. Abra especificamente a pasta `repo-estacao` no VS Code.
-2. No PlatformIO, execute `PROJECT TASKS → esp32doit-devkit-v1 → General → Build`.
-3. Aguarde a mensagem `[SUCCESS]`.
-4. Pressione `F1` e execute `Wokwi: Start Simulator`.
-5. Acompanhe as leituras no terminal chamado `Wokwi Terminal`.
-
-O arquivo `.pio/build/esp32doit-devkit-v1/firmware.bin` é criado pelo Build. Se o Wokwi informar que o firmware não foi encontrado, compile novamente antes de iniciar o simulador.
-
-### Terminal vazio no Windows
-
-Com o simulador aberto e visível, execute em um terminal PowerShell:
+Para compilar a cópia local:
 
 ```powershell
-& "C:\Users\tales\.platformio\penv\Scripts\pio.exe" device monitor --port "rfc2217://localhost:4000" --baud 115200
+cd simulador
+pio run
 ```
 
-Use `Ctrl+C` para encerrar o monitor.
+Depois da compilação, abra especificamente a pasta `simulador/` no VS Code e execute `Wokwi: Start Simulator`. Os caminhos de `wokwi.toml` são relativos a essa pasta.
 
-## Como testar
+Também é possível abrir a [simulação da S1 no navegador](https://wokwi.com/projects/474895435837456385). Consulte [`ENTREGA_S1.md`](ENTREGA_S1.md) para o resultado e as limitações dessa etapa.
 
-- Altere temperatura e umidade no DHT22 e confira a próxima leitura.
-- Altere a pressão no BMP180.
-- Ajuste o LDR e observe a leitura de luminosidade.
-- Gire o potenciômetro que representa o MQ-135.
-- Mova a chave e confirme a alternância de chuva entre `SIM` e `NÃO`.
+## Verificação após mudanças de estrutura
 
-Valores inválidos de temperatura, umidade ou pressão são identificados no terminal. Caso o BMP180 não seja encontrado, o firmware informa o problema e mantém as demais leituras em funcionamento.
+Execute cada validação a partir da respectiva pasta:
 
-## Próximas etapas
+```powershell
+cd software
+uv run pytest -q
 
-- aquisição e teste isolado dos sensores físicos;
-- montagem em protoboard;
-- integração do BME280, MQ-135, LDR e módulo de chuva reais;
-- conexão Wi-Fi e envio por MQTT;
-- API em Python, banco SQLite e dashboard web;
-- testes de campo e calibração.
+cd ..\firmware
+pio run
 
-Esses itens fazem parte das próximas sprints e não são apresentados como concluídos na S1.
+cd ..\simulador
+pio run
+```
+
+Uma alteração só deve ser integrada depois que os caminhos documentados e as três verificações continuarem funcionando.
