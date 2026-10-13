@@ -1,17 +1,23 @@
 from datetime import datetime
 from typing import Annotated, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+    field_validator,
+)
 
 DeviceId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
-class ReadingPayloadV1(BaseModel):
-    """Payload MQTT proposto para a versão 1 do contrato de dados."""
+class ReadingPayloadBase(BaseModel):
+    """Campos comuns às versões aceitas do contrato de dados."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    schema_version: Literal[1]
     device_id: DeviceId
     captured_at: datetime | None
     temperature_c: float | None
@@ -49,6 +55,36 @@ class ReadingPayloadV1(BaseModel):
         return "partial" if self.is_partial else "valid"
 
 
+class ReadingPayloadV1(ReadingPayloadBase):
+    """Payload histórico sem a leitura bruta de luminosidade."""
+
+    schema_version: Literal[1]
+
+
+class ReadingPayloadV2(ReadingPayloadBase):
+    """Payload atual com a leitura bruta de luminosidade."""
+
+    schema_version: Literal[2]
+    light_raw: int | None = Field(ge=0, le=4095)
+
+    sensor_fields: ClassVar[tuple[str, ...]] = (
+        "temperature_c",
+        "humidity_pct",
+        "pressure_hpa",
+        "gas_raw",
+        "light_raw",
+        "light_detected",
+        "rain_detected",
+    )
+
+
+ReadingPayload = Annotated[
+    ReadingPayloadV1 | ReadingPayloadV2,
+    Field(discriminator="schema_version"),
+]
+READING_PAYLOAD_ADAPTER = TypeAdapter(ReadingPayload)
+
+
 class ReadingRecord(BaseModel):
     """Leitura armazenada e devolvida pela API."""
 
@@ -63,6 +99,7 @@ class ReadingRecord(BaseModel):
     humidity_pct: float | None
     pressure_hpa: float | None
     gas_raw: int | None
+    light_raw: int | None
     light_detected: bool | None
     rain_detected: bool | None
     status: Literal["valid", "partial", "invalid"]

@@ -3,7 +3,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-DATABASE_VERSION = 1
+DATABASE_VERSION = 2
 DEFAULT_DATABASE_PATH = Path(__file__).resolve().parents[1] / "data" / "station.db"
 
 SCHEMA_SQL = """
@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS readings (
     ),
     pressure_hpa REAL,
     gas_raw INTEGER,
+    light_raw INTEGER CHECK (
+        light_raw IS NULL OR light_raw BETWEEN 0 AND 4095
+    ),
     light_detected INTEGER CHECK (
         light_detected IS NULL OR light_detected IN (0, 1)
     ),
@@ -61,6 +64,19 @@ def initialize_database(database_path: str | Path | None = None) -> Path:
 
     with closing(connect_database(path)) as connection:
         connection.executescript(SCHEMA_SQL)
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(readings)").fetchall()
+        }
+        if "light_raw" not in columns:
+            connection.execute(
+                """
+                ALTER TABLE readings
+                ADD COLUMN light_raw INTEGER CHECK (
+                    light_raw IS NULL OR light_raw BETWEEN 0 AND 4095
+                )
+                """
+            )
         connection.execute(f"PRAGMA user_version = {DATABASE_VERSION}")
         connection.commit()
 

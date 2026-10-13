@@ -16,6 +16,7 @@ EXPECTED_COLUMNS = [
     "humidity_pct",
     "pressure_hpa",
     "gas_raw",
+    "light_raw",
     "light_detected",
     "rain_detected",
     "status",
@@ -56,14 +57,15 @@ def test_readings_table_accepts_initial_contract_values(tmp_path) -> None:
                 humidity_pct,
                 pressure_hpa,
                 gas_raw,
+                light_raw,
                 light_detected,
                 rain_detected,
                 status,
                 validation_error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                1,
+                2,
                 "station-01",
                 None,
                 "2026-09-30T18:30:00Z",
@@ -71,6 +73,7 @@ def test_readings_table_accepts_initial_contract_values(tmp_path) -> None:
                 61.2,
                 1012.8,
                 840,
+                4095,
                 1,
                 0,
                 "valid",
@@ -83,6 +86,7 @@ def test_readings_table_accepts_initial_contract_values(tmp_path) -> None:
     assert row is not None
     assert row["device_id"] == "station-01"
     assert row["captured_at"] is None
+    assert row["light_raw"] == 4095
     assert row["light_detected"] == 1
     assert row["rain_detected"] == 0
 
@@ -111,3 +115,66 @@ def test_readings_table_rejects_invalid_constraints(
                 """,
                 (1, "station-01", "2026-09-30T18:30:00Z", humidity_pct, status),
             )
+
+
+@pytest.mark.parametrize("light_raw", [-1, 4096])
+def test_readings_table_rejects_light_raw_outside_adc_range(
+    tmp_path, light_raw: int
+) -> None:
+    database_path = tmp_path / "test.db"
+    initialize_database(database_path)
+
+    with closing(connect_database(database_path)) as connection:
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO readings (
+                    schema_version,
+                    device_id,
+                    received_at,
+                    light_raw,
+                    status
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (2, "station-01", "2026-09-30T18:30:00Z", light_raw, "valid"),
+            )
+
+
+def test_initialize_database_migrates_version_1_without_losing_rows(tmp_path) -> None:
+    database_path = tmp_path / "legacy.db"
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE readings (
+                id INTEGER PRIMARY KEY,
+                schema_version INTEGER NOT NULL,
+                device_id TEXT NOT NULL,
+                captured_at TEXT,
+                received_at TEXT NOT NULL,
+                temperature_c REAL,
+                humidity_pct REAL,
+                pressure_hpa REAL,
+                gas_raw INTEGER,
+                light_detected INTEGER,
+                rain_detected INTEGER,
+                status TEXT NOT NULL,
+                validation_error TEXT
+            );
+            INSERT INTO readings (
+                schema_version, device_id, received_at, status
+            ) VALUES (1, 'station-01', '2026-09-30T18:30:00Z', 'partial');
+            PRAGMA user_version = 1;
+            """
+        )
+
+    initialize_database(database_path)
+
+    with closing(connect_database(database_path)) as connection:
+        columns = connection.execute("PRAGMA table_info(readings)").fetchall()
+        row = connection.execute("SELECT * FROM readings WHERE id = 1").fetchone()
+        database_version = connection.execute("PRAGMA user_version").fetchone()[0]
+
+    assert "light_raw" in [column["name"] for column in columns]
+    assert row is not None
+    assert row["light_raw"] is None
+    assert database_version == DATABASE_VERSION

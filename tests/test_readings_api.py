@@ -6,23 +6,24 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app, get_repository
-from app.models import ReadingPayloadV1
+from app.models import READING_PAYLOAD_ADAPTER, ReadingPayload
 from app.repository import MAX_HISTORY_LIMIT, ReadingRepository
 
 
-def make_reading() -> ReadingPayloadV1:
+def make_reading() -> ReadingPayload:
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "device_id": "station-01",
         "captured_at": None,
         "temperature_c": 25.4,
         "humidity_pct": 61.2,
         "pressure_hpa": 1012.8,
         "gas_raw": None,
+        "light_raw": 4095,
         "light_detected": True,
         "rain_detected": False,
     }
-    return ReadingPayloadV1.model_validate_json(json.dumps(payload))
+    return READING_PAYLOAD_ADAPTER.validate_json(json.dumps(payload))
 
 
 @pytest.fixture
@@ -58,7 +59,7 @@ def test_latest_returns_most_recent_reading(api_client) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "id": reading_id,
-        "schema_version": 1,
+        "schema_version": 2,
         "device_id": "station-01",
         "captured_at": None,
         "received_at": "2026-09-30T18:30:00Z",
@@ -66,6 +67,7 @@ def test_latest_returns_most_recent_reading(api_client) -> None:
         "humidity_pct": 61.2,
         "pressure_hpa": 1012.8,
         "gas_raw": None,
+        "light_raw": 4095,
         "light_detected": True,
         "rain_detected": False,
         "status": "partial",

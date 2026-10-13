@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.database import connect_database, initialize_database
-from app.models import ReadingPayloadV1, ReadingRecord
+from app.models import ReadingPayload, ReadingRecord
 
 DEFAULT_HISTORY_LIMIT = 100
 MAX_HISTORY_LIMIT = 500
@@ -25,7 +25,7 @@ class ReadingRepository:
 
     def save(
         self,
-        reading: ReadingPayloadV1,
+        reading: ReadingPayload,
         *,
         received_at: datetime | None = None,
     ) -> int:
@@ -49,11 +49,12 @@ class ReadingRepository:
                     humidity_pct,
                     pressure_hpa,
                     gas_raw,
+                    light_raw,
                     light_detected,
                     rain_detected,
                     status,
                     validation_error
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     reading.schema_version,
@@ -64,6 +65,7 @@ class ReadingRepository:
                     reading.humidity_pct,
                     reading.pressure_hpa,
                     reading.gas_raw,
+                    getattr(reading, "light_raw", None),
                     reading.light_detected,
                     reading.rain_detected,
                     reading.reading_status,

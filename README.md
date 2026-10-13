@@ -6,7 +6,7 @@ Este repositório contém o backend da estação meteorológica. Ele recebe leit
 ESP32 → Mosquitto → assinante Python → SQLite → API → dashboard
 ```
 
-Na etapa atual, uma publicação manual com `mosquitto_pub` ocupa o lugar do ESP32. Os valores usados nesse teste são fictícios.
+O fluxo foi testado com o ESP32 físico e também pode ser reproduzido sem hardware por meio de uma publicação manual com `mosquitto_pub`.
 
 ## Estado atual
 
@@ -18,8 +18,9 @@ Já funcionam localmente:
 - rejeição de mensagens inválidas sem interromper o serviço;
 - consulta da leitura atual e do histórico pela API;
 - testes automatizados com bancos descartáveis.
+- publicação do ESP32 físico por Wi-Fi e MQTT no tópico contratado.
 
-A integração com ESP32, sensores e hotspot ainda não foi testada.
+A integração foi validada na rede Wi-Fi usada no desenvolvimento e em um hotspot de celular, incluindo uma janela contínua de dois minutos e a retomada após queda da rede. O funcionamento com os dados móveis desativados ainda não foi testado.
 
 ## Requisitos
 
@@ -38,11 +39,27 @@ O arquivo `.env` guarda a configuração local e já está incluído no `.gitign
 
 ## Como executar
 
+### Teste automático com o ESP32
+
+Com o ESP32 ligado e na mesma rede do notebook, execute apenas:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\testar-estacao.ps1
+```
+
+O script verifica o Mosquitto, inicia o assinante e a API em segundo plano e mostra as leituras atualizadas aproximadamente a cada 500 ms. Pressione `Ctrl+C` para encerrar; o banco, os logs e os processos temporários são removidos automaticamente.
+
+No Windows, também é possível abrir a pasta `software` e dar duplo clique em `TESTAR_ESTACAO.cmd`.
+
+### Execução manual
+
 Confirme que o Mosquitto está ativo:
 
 ```powershell
 Get-Service mosquitto
 ```
+
+Para receber o ESP32, o serviço deve carregar `config/mosquitto-lan.conf` e o Firewall do Windows deve permitir o executável do Mosquitto na porta TCP 1883 somente para a sub-rede local. A configuração é anônima e foi escolhida apenas para o protótipo acadêmico em rede isolada.
 
 Abra dois terminais na pasta `software`.
 
@@ -63,7 +80,7 @@ uv run uvicorn app.main:app --reload
 Com o assinante e a API em execução, abra um terceiro PowerShell e publique uma leitura:
 
 ```powershell
-$payload = '{"schema_version":1,"device_id":"station-01","captured_at":null,"temperature_c":26.1,"humidity_pct":58.4,"pressure_hpa":1011.7,"gas_raw":812,"light_detected":true,"rain_detected":false}'
+$payload = '{"schema_version":2,"device_id":"station-01","captured_at":null,"temperature_c":26.1,"humidity_pct":58.4,"pressure_hpa":1011.7,"gas_raw":812,"light_raw":4095,"light_detected":null,"rain_detected":false}'
 $payload | & 'C:\Program Files\mosquitto\mosquitto_pub.exe' -h 127.0.0.1 -p 1883 -t 'weather/station-01/readings' -q 1 -s
 ```
 
@@ -96,4 +113,4 @@ Os testes usam bancos temporários e não alteram `data/station.db`.
 
 - [Evidências da S2](docs/evidencias-s2.md)
 
-`gas_raw` é um valor bruto, não ppm. Os estados de luz e chuva também não representam lux ou milímetros.
+`gas_raw` é um valor bruto, não ppm. `light_raw` também é bruto e não representa lux. O estado de chuva não representa milímetros.

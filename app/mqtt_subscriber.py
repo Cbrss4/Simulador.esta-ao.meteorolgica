@@ -5,7 +5,7 @@ from typing import Literal
 import paho.mqtt.client as mqtt
 from pydantic import ValidationError
 
-from app.models import ReadingPayloadV1
+from app.models import READING_PAYLOAD_ADAPTER
 from app.repository import ReadingRepository
 from app.settings import Settings
 
@@ -28,7 +28,7 @@ class MqttMessageProcessor:
 
     def process(self, payload: bytes) -> ProcessingResult:
         try:
-            reading = ReadingPayloadV1.model_validate_json(payload)
+            reading = READING_PAYLOAD_ADAPTER.validate_json(payload)
         except ValidationError as exc:
             error = str(exc)
             logger.warning("Mensagem MQTT rejeitada: %s", error)

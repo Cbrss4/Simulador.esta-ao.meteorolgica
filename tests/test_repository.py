@@ -5,24 +5,25 @@ from datetime import datetime
 import pytest
 
 from app.database import connect_database
-from app.models import ReadingPayloadV1
+from app.models import READING_PAYLOAD_ADAPTER, ReadingPayload
 from app.repository import MAX_HISTORY_LIMIT, ReadingRepository
 
 
-def make_reading(**overrides: object) -> ReadingPayloadV1:
+def make_reading(**overrides: object) -> ReadingPayload:
     payload: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "device_id": "station-01",
         "captured_at": "2026-09-30T15:30:00-03:00",
         "temperature_c": 25.4,
         "humidity_pct": 61.2,
         "pressure_hpa": 1012.8,
         "gas_raw": 840,
+        "light_raw": 4095,
         "light_detected": True,
         "rain_detected": False,
     }
     payload.update(overrides)
-    return ReadingPayloadV1.model_validate_json(json.dumps(payload))
+    return READING_PAYLOAD_ADAPTER.validate_json(json.dumps(payload))
 
 
 def test_save_valid_reading_with_utc_timestamps(tmp_path) -> None:
@@ -42,6 +43,7 @@ def test_save_valid_reading_with_utc_timestamps(tmp_path) -> None:
     assert row["captured_at"] == "2026-09-30T18:30:00Z"
     assert row["received_at"] == "2026-09-30T15:00:00Z"
     assert row["status"] == "valid"
+    assert row["light_raw"] == 4095
     assert row["light_detected"] == 1
     assert row["rain_detected"] == 0
     assert row["validation_error"] is None

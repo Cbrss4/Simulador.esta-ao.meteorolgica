@@ -3,25 +3,26 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.models import ReadingPayloadV1
+from app.models import READING_PAYLOAD_ADAPTER, ReadingPayload
 
 
 def valid_payload() -> dict[str, object]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "device_id": "station-01",
         "captured_at": "2026-09-30T18:30:00Z",
         "temperature_c": 25.4,
         "humidity_pct": 61.2,
         "pressure_hpa": 1012.8,
         "gas_raw": 840,
+        "light_raw": 4095,
         "light_detected": True,
         "rain_detected": False,
     }
 
 
-def parse(payload: dict[str, object]) -> ReadingPayloadV1:
-    return ReadingPayloadV1.model_validate_json(json.dumps(payload))
+def parse(payload: dict[str, object]) -> ReadingPayload:
+    return READING_PAYLOAD_ADAPTER.validate_json(json.dumps(payload))
 
 
 def test_valid_payload_is_accepted() -> None:
@@ -51,6 +52,7 @@ def test_missing_capture_time_does_not_make_sensor_reading_partial() -> None:
         "humidity_pct",
         "pressure_hpa",
         "gas_raw",
+        "light_raw",
         "light_detected",
         "rain_detected",
     ],
@@ -68,13 +70,16 @@ def test_null_sensor_value_makes_payload_partial(sensor_field: str) -> None:
 @pytest.mark.parametrize(
     ("field", "invalid_value"),
     [
-        ("schema_version", 2),
+        ("schema_version", 3),
         ("device_id", "   "),
         ("captured_at", "2026-09-30T18:30:00"),
         ("temperature_c", "25.4"),
         ("humidity_pct", -0.1),
         ("humidity_pct", 100.1),
         ("gas_raw", 840.5),
+        ("light_raw", -1),
+        ("light_raw", 4096),
+        ("light_raw", 840.5),
         ("light_detected", 1),
     ],
 )
@@ -104,4 +109,14 @@ def test_extra_field_is_rejected() -> None:
 
 def test_malformed_json_is_rejected() -> None:
     with pytest.raises(ValidationError):
-        ReadingPayloadV1.model_validate_json('{"schema_version": 1')
+        READING_PAYLOAD_ADAPTER.validate_json('{"schema_version": 2')
+
+
+def test_version_1_payload_remains_accepted_without_light_raw() -> None:
+    payload = valid_payload()
+    payload["schema_version"] = 1
+    del payload["light_raw"]
+
+    reading = parse(payload)
+
+    assert reading.schema_version == 1

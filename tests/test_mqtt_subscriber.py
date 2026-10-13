@@ -14,13 +14,14 @@ from app.settings import Settings
 
 def payload_bytes(**overrides: object) -> bytes:
     payload: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "device_id": "station-01",
         "captured_at": None,
         "temperature_c": 25.4,
         "humidity_pct": 61.2,
         "pressure_hpa": 1012.8,
         "gas_raw": 840,
+        "light_raw": 4095,
         "light_detected": True,
         "rain_detected": False,
     }
@@ -45,6 +46,7 @@ def test_processor_stores_valid_message(tmp_path) -> None:
 
     assert row is not None
     assert row["device_id"] == "station-01"
+    assert row["light_raw"] == 4095
     assert row["status"] == "valid"
 
 
@@ -71,7 +73,7 @@ def test_processor_stores_partial_message(tmp_path) -> None:
     "payload",
     [
         b'{"schema_version": 1',
-        payload_bytes(schema_version=2),
+        payload_bytes(schema_version=3),
         payload_bytes(humidity_pct=150),
         b"\xff\xfe\xfd",
     ],
